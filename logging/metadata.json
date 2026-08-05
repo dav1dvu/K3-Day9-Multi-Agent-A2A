@@ -8,24 +8,25 @@
       "provider": "Ollama (local)",
       "parameter_count": "7.62B",
       "deployment_type": "local",
-      "usage": "Coordinator Agent — tổng hợp findings từ sub-agents, suy luận khi dữ liệu mâu thuẫn, gán confidence score",
+      "usage": "Coordinator Agent — reserved for synthesizing findings when deterministic rules disagree or leave the case ambiguous",
       "temperature": 0.1,
-      "max_tokens": 1024
+      "max_tokens": 1024,
+      "invoked_in_this_run": false,
+      "reason_not_invoked": "EC_POLICY_V1 is a complete deterministic rule table (see policy_agent.py); every one of the 50 official cases resolved unambiguously via pandas/date-comparison logic, so the LLM synthesis step was never triggered. See trace.jsonl (llm_called=false on all 300 entries) and architecture.md assumption #3."
     }
   ],
   "framework": "Python + pandas",
   "runtime": {
-    "python_version": "3.11+",
+    "python_version": "3.14",
     "dependencies": [
-      "pandas",
-      "ollama"
+      "pandas"
     ]
   },
   "agents": [
     {
       "name": "Coordinator Agent",
-      "uses_llm": true,
-      "model": "Qwen2.5-7B-Instruct"
+      "uses_llm": false,
+      "model": "Qwen2.5-7B-Instruct (declared, not invoked this run — see models[0].reason_not_invoked)"
     },
     {
       "name": "Order & Seller Agent",

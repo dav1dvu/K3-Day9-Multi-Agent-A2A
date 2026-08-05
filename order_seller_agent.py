@@ -1,16 +1,20 @@
-import os
+"""Order & Seller Agent.
+
+Loads orders/order_items/sellers from `data/`, resolves a claimed_order_id and
+returns an OrderSellerFindings dict (see architecture.md section 7.1). Pure
+pandas lookups — no LLM involved.
+"""
+
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional
 
 import pandas as pd
 
+from common import clean, money
+
 
 class OrderSellerQuery:
-    """Helper for fast order and seller lookups by claimed_order_id.
-
-    This class loads the 3 Olist CSVs from `data/` and builds in-memory
-    lookup indexes for order records, order items, and seller details.
-    """
+    """Fast in-memory lookup index over orders, order_items and sellers."""
 
     def __init__(self, data_dir: str = "data"):
         self.data_dir = Path(data_dir)
@@ -23,16 +27,17 @@ class OrderSellerQuery:
         self._seller_index = self.sellers.set_index("seller_id")
 
     def _load_orders(self) -> pd.DataFrame:
-        path = self.data_dir / "olist_orders_dataset.csv"
-        return pd.read_csv(path, dtype=str)
+        return pd.read_csv(self.data_dir / "olist_orders_dataset.csv", dtype=str)
 
     def _load_order_items(self) -> pd.DataFrame:
-        path = self.data_dir / "olist_order_items_dataset.csv"
-        return pd.read_csv(path, dtype=str)
+        df = pd.read_csv(self.data_dir / "olist_order_items_dataset.csv", dtype=str)
+        df["order_item_id"] = df["order_item_id"].astype(int)
+        df["price"] = df["price"].astype(float)
+        df["freight_value"] = df["freight_value"].astype(float)
+        return df
 
     def _load_sellers(self) -> pd.DataFrame:
-        path = self.data_dir / "olist_sellers_dataset.csv"
-        return pd.read_csv(path, dtype=str)
+        return pd.read_csv(self.data_dir / "olist_sellers_dataset.csv", dtype=str)
 
     @staticmethod
     def normalize_claimed_order_id(claimed_order_id: str) -> str:
@@ -48,27 +53,12 @@ class OrderSellerQuery:
     def get_order_items(self, claimed_order_id: str) -> pd.DataFrame:
         claimed_order_id = self.normalize_claimed_order_id(claimed_order_id)
         try:
-            return self._order_items_by_order.get_group(claimed_order_id).copy()
+            return self._order_items_by_order.get_group(claimed_order_id).sort_values("order_item_id").copy()
         except KeyError:
             return pd.DataFrame(columns=self.order_items.columns)
 
-    def get_sellers_for_order(self, claimed_order_id: str) -> pd.DataFrame:
-        items = self.get_order_items(claimed_order_id)
-        if items.empty:
-            return pd.DataFrame(columns=self.sellers.columns)
-
-        seller_ids = items["seller_id"].dropna().unique().tolist()
-        if not seller_ids:
-            return pd.DataFrame(columns=self.sellers.columns)
-
-        return self.sellers[self.sellers["seller_id"].isin(seller_ids)].copy()
-
-    def get_order_context(self, claimed_order_id: str) -> Dict[str, pd.DataFrame]:
-        return {
-            "order": self.get_order(claimed_order_id),
-            "order_items": self.get_order_items(claimed_order_id),
-            "sellers": self.get_sellers_for_order(claimed_order_id),
-        }
+    def seller_exists(self, seller_id: str) -> bool:
+        return seller_id in self._seller_index.index
 
 
 def load_order_seller_query(data_dir: str = "data") -> OrderSellerQuery:
@@ -76,10 +66,55 @@ def load_order_seller_query(data_dir: str = "data") -> OrderSellerQuery:
     return OrderSellerQuery(data_dir=data_dir)
 
 
+class OrderSellerAgent:
+    """Resolves a claimed_order_id into order status, items, sellers and totals."""
+
+    def __init__(self, query: Optional[OrderSellerQuery] = None, data_dir: str = "data"):
+        self.query = query or load_order_seller_query(data_dir)
+
+    def analyze(self, claimed_order_id: str) -> Dict:
+        order = self.query.get_order(claimed_order_id)
+        order_id = self.query.normalize_claimed_order_id(claimed_order_id)
+        found = order is not None
+
+        items_df = self.query.get_order_items(claimed_order_id) if found else pd.DataFrame()
+        items: List[Dict] = [
+            {
+                "order_item_id": int(row["order_item_id"]),
+                "product_id": clean(row["product_id"]),
+                "seller_id": clean(row["seller_id"]),
+                "shipping_limit_date": clean(row["shipping_limit_date"]),
+                "price": money(row["price"]),
+                "freight_value": money(row["freight_value"]),
+            }
+            for _, row in items_df.iterrows()
+        ]
+
+        item_total = money(sum(i["price"] for i in items))
+        freight_total = money(sum(i["freight_value"] for i in items))
+        seller_ids = sorted({i["seller_id"] for i in items if i["seller_id"]})
+
+        order_status = clean(order["order_status"]) if found else None
+
+        return {
+            "order_id": order_id,
+            "order_found": found,
+            "order_status": order_status,
+            "order_purchase_timestamp": clean(order["order_purchase_timestamp"]) if found else None,
+            "order_approved_at": clean(order["order_approved_at"]) if found else None,
+            "order_delivered_carrier_date": clean(order["order_delivered_carrier_date"]) if found else None,
+            "order_delivered_customer_date": clean(order["order_delivered_customer_date"]) if found else None,
+            "order_estimated_delivery_date": clean(order["order_estimated_delivery_date"]) if found else None,
+            "customer_id": clean(order["customer_id"]) if found else None,
+            "items": items,
+            "item_total_brl": item_total,
+            "freight_total_brl": freight_total,
+            "seller_ids": seller_ids,
+            "is_canceled": order_status == "canceled",
+            "is_unavailable": order_status == "unavailable",
+        }
+
+
 if __name__ == "__main__":
-    loader = load_order_seller_query("data")
-    sample_id = "CLAIMED_ORDER_ID"
-    order = loader.get_order(sample_id)
-    print("Order record:\n", order)
-    print("Order items:\n", loader.get_order_items(sample_id))
-    print("Sellers for order:\n", loader.get_sellers_for_order(sample_id))
+    agent = OrderSellerAgent()
+    print(agent.analyze("e2a03ccf5ea816036608b2d8c3ab8e60"))

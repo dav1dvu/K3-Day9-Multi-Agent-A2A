@@ -310,30 +310,44 @@ Step 6  ┌──────────────▼────────
 
 ---
 
-## 8. Assumptions
+## 8. Implementation Notes (as-built)
 
-> Các assumption dưới đây được ghi nhận vì chưa có source code thực tế tại thời điểm viết
-> kiến trúc. Khi implement, cần xác minh và điều chỉnh nếu cần.
+> Section này thay thế bản "Assumptions" ban đầu — ghi lại cách hệ thống thực sự chạy,
+> sau khi implement và verify trên đủ 50 case trong `input/`.
 
-1. **Naming convention**: tên 5 sub-agents tuân theo gợi ý trong README section 7 —
-   `Order & Seller Agent`, `Payment Agent`, `Delivery Agent`, `Policy Agent`, `Verifier Agent`.
+1. **Naming convention**: tên 5 sub-agents đúng như gợi ý trong README section 7, source
+   tương ứng: `order_seller_agent.py`, `payment_agent.py`, `delivery_agent.py`,
+   `policy_agent.py`, `verifier_agent.py`, điều phối bởi `coordinator.py`.
 
-2. **Song song Step 3**: Payment Agent và Delivery Agent có thể chạy song song vì output
-   của chúng không phụ thuộc lẫn nhau. Implementation có thể dùng `asyncio` hoặc
-   `concurrent.futures`.
+2. **Step 3 chạy tuần tự, không async**: Payment Agent và Delivery Agent độc lập nhau về
+   mặt data (đúng như thiết kế), nhưng cả hai CSV đã được load sẵn trong bộ nhớ và mỗi
+   lookup chỉ mất vài mili-giây, nên `coordinator.py` gọi chúng tuần tự thay vì dùng
+   `asyncio`/`concurrent.futures` — độ phức tạp thêm vào không đáng để đổi lấy vài ms.
 
-3. **LLM usage tối thiểu**: do bài toán chủ yếu là logic xác định trên dữ liệu có cấu trúc,
-   LLM chỉ được dùng ở Coordinator cho bước tổng hợp/confidence. Nếu pipeline xác định đủ
-   tốt, LLM call có thể được bypass hoàn toàn cho performance.
+3. **LLM thực tế không được gọi**: `EC_POLICY_V1` là một bảng luật đầy đủ; cả 50 case
+   chính thức đều được `policy_agent.py` phân loại dứt khoát bằng so sánh ngày tháng/số
+   tiền thuần Python, không có case nào mâu thuẫn cần LLM phân xử. Coordinator vẫn khai
+   báo model trong `metadata.json` (đáp ứng yêu cầu "phải khai báo model") nhưng
+   `invoked_in_this_run: false` — khớp với `llm_called: false` trên toàn bộ 300 dòng
+   `trace.jsonl`. Confidence được gán bằng công thức xác định trong `policy_agent.py`
+   (base score theo primary_issue, trừ điểm khi thiếu timestamp/payment row) thay vì LLM.
 
-4. **Model ≤ 10B**: sử dụng `Qwen2.5-7B-Instruct` (7.62B params) chạy local qua Ollama
-   hoặc qua API tương đương. Không sử dụng model lớn hơn.
+4. **Model ≤ 10B**: `Qwen2.5-7B-Instruct` (7.62B params) qua Ollama local — đúng ngân sách
+   tham số, dự phòng cho các case mơ hồ trong tương lai dù không được kích hoạt ở lần chạy
+   này.
 
 5. **Single-pass pipeline**: mỗi case chạy qua pipeline 1 lần, không có retry loop giữa
-   các agent. Verifier chỉ validate, không gửi ngược lại Coordinator để sửa.
+   các agent. Verifier chỉ validate (raise `VerificationError` nếu sai) và ghi file, không
+   gửi ngược lại Coordinator để sửa.
 
-6. **metadata.json**: đặt tại `logging/metadata.json` theo cấu trúc repo hiện tại.
-   Bản sao cũng đặt tại root `metadata.json` nếu cần.
+6. **metadata.json**: giữ đồng thời ở root và `logging/metadata.json` (hai file giống hệt
+   nhau) để thỏa cả yêu cầu "file bắt buộc ở root repo" và cấu trúc `logging/` sẵn có.
+   Tương tự, `trace.jsonl` được ghi ra cả root và `logging/trace.jsonl`.
+
+7. **Validator độc lập**: `validate_output.py` re-check toàn bộ 50 file trong `output/`
+   bằng cách đọc thẳng CSV (không tái dùng agent objects) — xác nhận từng evidence ID trỏ
+   đúng vào order/item/payment/seller có thật, và refund khớp công thức theo
+   `primary_issue`. Kết quả lần chạy gần nhất: 50/50 PASS.
 
 ---
 
