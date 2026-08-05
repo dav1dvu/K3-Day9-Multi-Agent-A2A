@@ -5,7 +5,7 @@
 | Thông tin       | Nội dung |
 | --------------- | ------------ |
 | Họ và tên       | Vũ Tú Quỳnh |
-| MSSV            | 00005 |
+| MSSV            | 01239 |
 | Khóa/Lớp        | K3 |
 | Vai trò chính   | Policy & Verifier Agent (QA Lead) |
 | Ngày hoàn thành | 2026-08-05 |
