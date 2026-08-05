@@ -4,10 +4,10 @@
   "policy_version": "EC_POLICY_V1",
   "models": [
     {
-      "model_name": "Qwen2.5-7B-Instruct",
-      "provider": "Ollama (local)",
-      "parameter_count": "7.62B",
-      "deployment_type": "local",
+      "model_name": "tiiuae/falcon-7b-instruct",
+      "provider": "Hugging Face Hub",
+      "parameter_count": "7B",
+      "deployment_type": "remote",
       "usage": "Coordinator Agent — tổng hợp findings từ sub-agents, suy luận khi dữ liệu mâu thuẫn, gán confidence score",
       "temperature": 0.1,
       "max_tokens": 1024
@@ -16,16 +16,14 @@
   "framework": "Python + pandas",
   "runtime": {
     "python_version": "3.11+",
-    "dependencies": [
-      "pandas",
-      "ollama"
-    ]
+    "inference_runtime": "huggingface_hub",
+    "dependencies": ["pandas", "huggingface_hub"]
   },
   "agents": [
     {
       "name": "Coordinator Agent",
       "uses_llm": true,
-      "model": "Qwen2.5-7B-Instruct"
+      "model": "tiiuae/falcon-7b-instruct"
     },
     {
       "name": "Order & Seller Agent",
