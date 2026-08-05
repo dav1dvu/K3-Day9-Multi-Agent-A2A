@@ -36,6 +36,7 @@ class DeliveryAgent:
                 }
             )
 
+        late_seller_ids: List[str] = [item["seller_id"] for item in seller_shipping_limits if item["seller_handoff_late"]]
         responsible_party = None
         if is_late_delivery:
             responsible_party = "seller" if any_seller_late else "logistics_provider"
@@ -47,6 +48,7 @@ class DeliveryAgent:
             "order_delivered_carrier_date": f["order_delivered_carrier_date"],
             "is_late_delivery": is_late_delivery,
             "seller_shipping_limits": seller_shipping_limits,
+            "late_seller_ids": late_seller_ids,
             "any_seller_late": any_seller_late,
             "responsible_party": responsible_party,
         }
