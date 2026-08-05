@@ -105,3 +105,56 @@ class PolicyAgent:
 
 def is_valid_evidence_id(evidence_id):
     return bool(EVIDENCE_RE.fullmatch(evidence_id))
+class VerifierAgent:
+    """Validate final output before Coordinator writes it."""
+
+    TOP_LEVEL = {
+        "case_id", "assessment", "affected_entities", "root_cause_analysis",
+        "evidence_ids", "financial_resolution", "resolution_actions",
+    }
+
+    def validate(self, result: dict) -> None:
+        missing = self.TOP_LEVEL - set(result)
+        if missing:
+            raise ValueError(f"missing top-level fields: {sorted(missing)}")
+
+        assessment = result["assessment"]
+        if assessment["primary_issue"] not in ISSUES:
+            raise ValueError("invalid primary_issue")
+        if assessment["case_status"] not in {"action_required", "no_action"}:
+            raise ValueError("invalid case_status")
+        confidence = assessment["confidence"]
+        if not isinstance(confidence, (int, float)) or not 0 <= confidence <= 1:
+            raise ValueError("confidence must be in [0, 1]")
+
+        entities = result["affected_entities"]
+        for key in ("order_ids", "item_ids", "seller_ids", "payment_ids"):
+            if key not in entities:
+                raise ValueError(f"missing entity set: {key}")
+            if len(entities[key]) > 5:
+                raise ValueError(f"{key} exceeds maximum 5")
+
+        evidence = result["evidence_ids"]
+        if len(evidence) > 10 or any(not is_valid_evidence_id(x) for x in evidence):
+            raise ValueError("invalid evidence_ids")
+
+        analysis = result["root_cause_analysis"]
+        causes = analysis["ranked_causes"]
+        parties = analysis["responsible_parties"]
+        if len(causes) > 3 or len(parties) > 3:
+            raise ValueError("root cause/party limit exceeded")
+        if any(x["cause_code"] not in CAUSES for x in causes):
+            raise ValueError("invalid cause_code")
+        if len(result["resolution_actions"]) > 5:
+            raise ValueError("resolution_actions exceeds maximum 5")
+
+        financial = result["financial_resolution"]
+        if financial["currency"] != "BRL":
+            raise ValueError("currency must be BRL")
+        refund = round(float(financial["recommended_refund_brl"]), 2)
+        if refund < 0:
+            raise ValueError("refund cannot be negative")
+        if assessment["case_status"] == "no_action" and refund != 0:
+            raise ValueError("no_action requires zero refund")
+
+        return None
