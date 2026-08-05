@@ -5,7 +5,7 @@
 | Thông tin       | Nội dung |
 | --------------- | ------------ |
 | Họ và tên       | Trần Thị Ngọc Lan |
-| MSSV            | 00002 |
+| MSSV            | 2A202601385 |
 | Khóa/Lớp        | K3 |
 | Vai trò chính   | Order & Seller Agent Lead |
 | Ngày hoàn thành | 2026-08-05 |
