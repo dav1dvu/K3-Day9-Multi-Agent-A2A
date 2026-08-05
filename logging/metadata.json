@@ -4,28 +4,38 @@
   "policy_version": "EC_POLICY_V1",
   "models": [
     {
-      "model_name": "Qwen2.5-7B-Instruct",
-      "provider": "Ollama (local)",
-      "parameter_count": "7.62B",
-      "deployment_type": "local",
-      "usage": "Coordinator Agent — tổng hợp findings từ sub-agents, suy luận khi dữ liệu mâu thuẫn, gán confidence score",
+      "model_name": "gemma-4-31b-it",
+      "provider": "Google AI Studio (Gemini API)",
+      "parameter_count": "31B",
+      "deployment_type": "cloud",
+      "usage": "Coordinator Agent — Xoay tua với gemma-4-26b-a4b-it để tổng hợp findings và gán confidence score",
+      "temperature": 0.1,
+      "max_tokens": 1024
+    },
+    {
+      "model_name": "gemma-4-26b-a4b-it",
+      "provider": "Google AI Studio (Gemini API)",
+      "parameter_count": "26B",
+      "deployment_type": "cloud",
+      "usage": "Coordinator Agent — Xoay tua với gemma-4-31b-it để tổng hợp findings và gán confidence score",
       "temperature": 0.1,
       "max_tokens": 1024
     }
   ],
   "framework": "Python + pandas",
   "runtime": {
-    "python_version": "3.11+",
+    "python_version": "3.12+",
     "dependencies": [
       "pandas",
-      "ollama"
+      "requests",
+      "pytest"
     ]
   },
   "agents": [
     {
       "name": "Coordinator Agent",
       "uses_llm": true,
-      "model": "Qwen2.5-7B-Instruct"
+      "model": "gemma-4-31b-it / gemma-4-26b-a4b-it (rotated)"
     },
     {
       "name": "Order & Seller Agent",

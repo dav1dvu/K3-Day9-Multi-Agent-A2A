@@ -8,6 +8,10 @@ business logic.
 from __future__ import annotations
 
 import json
+import os
+import time
+import re
+import requests
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -21,7 +25,7 @@ from src.models import CaseState
 
 TRACE_FILE = Path("logging/trace.jsonl")
 REQUIRED_CASE_FIELDS = {"case_id", "customer_request", "policy_version"}
-REQUIRED_CUSTOMER_REQUEST_FIELDS = {"language", "message", "claimed_order_id"}
+REQUIRED_CUSTOMER_REQUEST_FIELDS = {"language", "claimed_order_id"}
 
 
 class CoordinatorError(Exception):
@@ -141,6 +145,13 @@ class CoordinatorAgent:
                 payment_findings,
                 delivery_findings,
             )
+            
+            # Execute rotated LLM synthesis & confidence score call
+            llm_confidence = self._evaluate_with_llm(
+                state.case_id, order_findings, payment_findings, delivery_findings, policy_decision
+            )
+            policy_decision["confidence"] = llm_confidence
+            
             state.policy_decision = policy_decision
 
             self._handoff("PolicyAgent", "VerifierAgent", {"policy_decision": policy_decision})
@@ -175,6 +186,117 @@ class CoordinatorAgent:
             state.errors.append({"agent": err.agent_name, "message": err.message})
             _write_trace("case_failed", self.current_case_id, err.agent_name, "failed", {"error": err.message})
             raise
+
+    def _evaluate_with_llm(self, case_id: str, order_findings: dict, payment_findings: dict, delivery_findings: dict, policy_decision: dict) -> float:
+        # Determine rotated model
+        try:
+            # e.g. case_id = "EC_001" -> 1
+            case_num = int(case_id.split("_")[1])
+        except Exception:
+            case_num = 1
+            
+        model_name = "gemma-4-31b-it" if case_num % 2 == 1 else "gemma-4-26b-a4b-it"
+        
+        # Load Gemini API Key
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+            if env_path.exists():
+                for line in env_path.read_text(encoding="utf-8").splitlines():
+                    if line.startswith("GEMINI_API_KEY="):
+                        api_key = line.split("=", 1)[1].strip()
+                        break
+        if not api_key:
+            # Fallback to the policy agent confidence if key is missing to avoid crashing
+            return round(max(0.0, min(1.0, policy_decision.get("confidence", 0.99))), 2)
+
+        # Build prompt
+        prompt = f"""Bạn là một AI assistant điều phối trong hệ thống giải quyết khiếu nại thương mại điện tử Olist.
+Nhiệm vụ của bạn là đánh giá tính nhất quán của kết quả phân tích từ các Sub-Agents và trả về điểm số tin cậy (confidence score) từ 0.0 đến 1.0.
+
+Dưới đây là thông tin chi tiết:
+- Dữ liệu Order & Seller: {json.dumps(order_findings, ensure_ascii=False)}
+- Dữ liệu Payment: {json.dumps(payment_findings, ensure_ascii=False)}
+- Dữ liệu Delivery: {json.dumps(delivery_findings, ensure_ascii=False)}
+- Quyết định Policy đề xuất: {json.dumps(policy_decision, ensure_ascii=False)}
+
+Hãy trả về phản hồi dưới dạng JSON duy nhất chứa cấu trúc sau:
+{{
+  "assessment_confirmed": true,
+  "confidence": 0.99,
+  "rationale": "Mô tả ngắn gọn lý do bằng tiếng Việt."
+}}
+"""
+
+        # Log agent started for LLM
+        _write_trace("llm_started", case_id, f"CoordinatorAgent ({model_name})", "running", {"model": model_name})
+        t0 = time.perf_counter()
+        
+        confidence = policy_decision.get("confidence", 0.99)  # Fallback
+        
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}]
+            }
+            resp = requests.post(url, json=payload, timeout=15)
+            duration_ms = (time.perf_counter() - t0) * 1000
+            
+            if resp.status_code == 200:
+                resp_json = resp.json()
+                parts = resp_json['candidates'][0]['content']['parts']
+                # Concatenate non-thought parts
+                text_content = ""
+                for part in parts:
+                    if not part.get("thought"):
+                        text_content += part.get("text", "")
+                
+                # Parse JSON block or text
+                match = re.search(r"\{.*\}", text_content, re.DOTALL)
+                if match:
+                    json_str = match.group(0)
+                    res_data = json.loads(json_str)
+                    confidence = float(res_data.get("confidence", confidence))
+                else:
+                    # Fallback parsing
+                    res_data = json.loads(text_content.strip())
+                    confidence = float(res_data.get("confidence", confidence))
+                
+                _write_trace(
+                    "llm_completed",
+                    case_id,
+                    f"CoordinatorAgent ({model_name})",
+                    "success",
+                    {
+                        "llm_called": True,
+                        "model": model_name,
+                        "duration_ms": duration_ms,
+                        "confidence": confidence,
+                        "text_content": text_content[:200]
+                    }
+                )
+            else:
+                _write_trace(
+                    "llm_completed",
+                    case_id,
+                    f"CoordinatorAgent ({model_name})",
+                    "failure",
+                    {
+                        "error": f"API returned status code {resp.status_code}",
+                        "response": resp.text[:200]
+                    }
+                )
+        except Exception as e:
+            _write_trace(
+                "llm_completed",
+                case_id,
+                f"CoordinatorAgent ({model_name})",
+                "failure",
+                {"error": str(e)}
+            )
+
+        return round(max(0.0, min(1.0, confidence)), 2)
+
 
 
 if __name__ == "__main__":
