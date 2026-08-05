@@ -5,7 +5,7 @@
 | Thông tin       | Nội dung |
 | --------------- | ------------ |
 | Họ và tên       | Nguyễn Hoàng Biên |
-| MSSV            | 00001 |
+| MSSV            | 2A202601233 |
 | Khóa/Lớp        | K3 |
 | Vai trò chính   | Team Leader & Architect |
 | Ngày hoàn thành | 2026-08-05 |
