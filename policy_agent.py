@@ -42,7 +42,7 @@ class PolicyAgent:
         }
 
         evidence_ids = self._build_evidence(
-            order_id, order_seller["order_found"], item_ids, payment_ids, seller_ids, rule["cause_code"]
+            order_id, order_seller["order_found"], item_ids, payment_ids, rule["responsible_parties"], rule["cause_code"]
         )
 
         confidence = self._confidence(rule["primary_issue"], order_seller, payment)
@@ -144,16 +144,14 @@ class PolicyAgent:
         order_found: bool,
         item_ids: List[str],
         payment_ids: List[str],
-        seller_ids: List[str],
+        responsible_parties: List[Dict],
         cause_code: str,
     ) -> List[str]:
-        """Every ID cited in affected_entities gets a matching evidence entry —
-        not just the party held responsible — so evidence fully backs the claim."""
         evidence: List[str] = []
         if order_found:
             evidence.append(f"order:{order_id}")
 
-        seller_evidence = [f"seller:{sid}" for sid in seller_ids]
+        seller_evidence = [f"seller:{p['party_id']}" for p in responsible_parties if p["party_type"] == "seller"]
         pool = [f"item:{iid}" for iid in item_ids] + [f"payment:{pid}" for pid in payment_ids] + seller_evidence
 
         budget = max(MAX_EVIDENCE_IDS - len(evidence) - 1, 0)  # reserve 1 slot for the policy evidence
@@ -162,18 +160,13 @@ class PolicyAgent:
         return cap(evidence, MAX_EVIDENCE_IDS)
 
     def _confidence(self, primary_issue: str, order_seller: Dict, payment: Dict) -> float:
-        # All 6 rules are deterministic boolean/date/sum checks over verified Olist
-        # data, and the official 50 cases are guaranteed unambiguous (README section
-        # 4), so base confidence is high; the deductions below only guard against
-        # data-quality issues that never occur in this dataset (order not found,
-        # missing timestamps, zero payment rows) but could appear on unseen cases.
         base = {
-            "canceled_order_paid": 0.99,
-            "unavailable_order_paid": 0.99,
-            "late_delivery_seller": 0.97,
-            "late_delivery_logistics": 0.97,
-            "valid_split_payment": 0.95,
-            "unsupported_late_claim": 0.93,
+            "canceled_order_paid": 0.95,
+            "unavailable_order_paid": 0.95,
+            "late_delivery_seller": 0.9,
+            "late_delivery_logistics": 0.9,
+            "valid_split_payment": 0.85,
+            "unsupported_late_claim": 0.85,
         }[primary_issue]
 
         if not order_seller["order_found"]:
