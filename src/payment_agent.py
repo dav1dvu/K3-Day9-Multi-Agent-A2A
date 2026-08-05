@@ -1,9 +1,11 @@
-"""Payment data helpers for the Phase 1 payment/finance workstream.
+"""Payment Agent for the payment/finance workstream.
 
 The module loads Olist payment rows once, indexes them by ``order_id`` and
 reconciles their total against the item plus freight total produced by the
-Order & Seller Agent.  All business decisions are deterministic; no LLM is
-used for financial arithmetic.
+Order & Seller Agent. Phase 2 also classifies a valid split payment when an
+order has at least two payment rows and the reconciled totals differ by no
+more than 0.10 BRL. All business decisions are deterministic; no LLM is used
+for financial arithmetic.
 """
 
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -118,14 +120,21 @@ class PaymentAgent:
         payment_total = as_money(payment_total)
         expected_total = as_money(as_money(item_total_brl) + as_money(freight_total_brl))
         difference = as_money(abs(payment_total - expected_total))
+        payment_count = len(rows)
+        has_payment = payment_count > 0
+        is_split_payment = payment_count >= 2
+        payment_matches_order = has_payment and difference <= TOLERANCE_BRL
+        valid_split_payment = is_split_payment and payment_matches_order
 
         return {
             "order_id": order_id,
             "payment_rows": rows,
             "payment_total_brl": float(payment_total),
-            "payment_count": len(rows),
-            "is_split_payment": len(rows) >= 2,
-            "payment_matches_order": difference <= TOLERANCE_BRL,
+            "payment_count": payment_count,
+            "has_payment": has_payment,
+            "is_split_payment": is_split_payment,
+            "payment_matches_order": payment_matches_order,
+            "valid_split_payment": valid_split_payment,
             "tolerance_diff_brl": float(difference),
         }
 

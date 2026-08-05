@@ -236,13 +236,18 @@ Step 6  ┌──────────────▼────────
             "seller_id": str,
             "shipping_limit_date": str,
             "price": float,
-            "freight_value": float
+            "freight_value": float,
+            "carrier_after_limit": bool           # order_delivered_carrier_date > shipping_limit_date
         }
     ],
     "item_total_brl": float,                      # sum(price)
     "freight_total_brl": float,                   # sum(freight_value)
     "seller_ids": [str],
-    "customer_id": str
+    "customer_id": str,
+    "is_canceled": bool,                          # order_status == "canceled"
+    "is_unavailable": bool,                       # order_status == "unavailable"
+    "status_tags": [str],                         # ["canceled"] | ["unavailable"] | []
+    "any_carrier_after_limit": bool                # any item with carrier_after_limit == True
 }
 ```
 
