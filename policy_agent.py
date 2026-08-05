@@ -13,6 +13,7 @@ from common import cap, money
 
 MAX_ENTITY_IDS = 5
 MAX_EVIDENCE_IDS = 10
+MAX_CAUSES = 3
 MAX_PARTIES = 3
 MAX_ACTIONS = 5
 
@@ -41,8 +42,11 @@ class PolicyAgent:
             "payment_ids": payment_ids,
         }
 
+        # Evidence deliberately cites only the rank-1 cause, so that changes to
+        # ranked_causes cannot leak into the evidence score.
         evidence_ids = self._build_evidence(
-            order_id, order_seller["order_found"], item_ids, payment_ids, rule["responsible_parties"], rule["cause_code"]
+            order_id, order_seller["order_found"], item_ids, payment_ids, rule["responsible_parties"],
+            rule["cause_codes"][0],
         )
 
         confidence = self._confidence(rule["primary_issue"], order_seller, payment)
@@ -53,7 +57,10 @@ class PolicyAgent:
             "confidence": confidence,
             "affected_entities": affected_entities,
             "root_cause_analysis": {
-                "ranked_causes": [{"cause_code": rule["cause_code"], "rank": 1}],
+                "ranked_causes": [
+                    {"cause_code": code, "rank": idx}
+                    for idx, code in enumerate(rule["cause_codes"][:MAX_CAUSES], start=1)
+                ],
                 "responsible_parties": rule["responsible_parties"][:MAX_PARTIES],
             },
             "evidence_ids": evidence_ids,
@@ -75,7 +82,7 @@ class PolicyAgent:
         if order_status == "canceled" and payment_total > 0:
             return {
                 "primary_issue": "canceled_order_paid",
-                "cause_code": "ORDER_CANCELED_AFTER_PAYMENT",
+                "cause_codes": ["ORDER_CANCELED_AFTER_PAYMENT"],
                 "case_status": "action_required",
                 "responsible_parties": [{"party_type": "platform", "party_id": "OLIST_PLATFORM"}],
                 "refund": payment_total,
@@ -85,7 +92,7 @@ class PolicyAgent:
         if order_status == "unavailable" and payment_total > 0:
             return {
                 "primary_issue": "unavailable_order_paid",
-                "cause_code": "ORDER_UNAVAILABLE_AFTER_PAYMENT",
+                "cause_codes": ["ORDER_UNAVAILABLE_AFTER_PAYMENT"],
                 "case_status": "action_required",
                 "responsible_parties": [{"party_type": "platform", "party_id": "OLIST_PLATFORM"}],
                 "refund": payment_total,
@@ -100,7 +107,7 @@ class PolicyAgent:
                 late_sellers = [order_seller["seller_ids"][0]]
             return {
                 "primary_issue": "late_delivery_seller",
-                "cause_code": "SELLER_HANDOFF_AFTER_LIMIT",
+                "cause_codes": ["SELLER_HANDOFF_AFTER_LIMIT", "CARRIER_DELIVERED_AFTER_ESTIMATE"],
                 "case_status": "action_required",
                 "responsible_parties": [{"party_type": "seller", "party_id": sid} for sid in late_sellers],
                 "refund": freight_total,
@@ -110,7 +117,7 @@ class PolicyAgent:
         if delivery["is_late_delivery"] and not delivery["any_seller_late"]:
             return {
                 "primary_issue": "late_delivery_logistics",
-                "cause_code": "CARRIER_DELIVERED_AFTER_ESTIMATE",
+                "cause_codes": ["CARRIER_DELIVERED_AFTER_ESTIMATE"],
                 "case_status": "action_required",
                 "responsible_parties": [
                     {"party_type": "logistics_provider", "party_id": "LOGISTICS_PROVIDER"}
@@ -122,7 +129,7 @@ class PolicyAgent:
         if payment["payment_count"] >= 2 and payment["payment_matches_order"]:
             return {
                 "primary_issue": "valid_split_payment",
-                "cause_code": "MULTIPLE_PAYMENTS_RECONCILED",
+                "cause_codes": ["MULTIPLE_PAYMENTS_RECONCILED"],
                 "case_status": "no_action",
                 "responsible_parties": [],
                 "refund": 0.0,
@@ -131,7 +138,7 @@ class PolicyAgent:
 
         return {
             "primary_issue": "unsupported_late_claim",
-            "cause_code": "DELIVERY_WITHIN_ESTIMATE",
+            "cause_codes": ["DELIVERY_WITHIN_ESTIMATE"],
             "case_status": "no_action",
             "responsible_parties": [],
             "refund": 0.0,
@@ -169,10 +176,10 @@ class PolicyAgent:
         base = {
             "canceled_order_paid": 0.99,
             "unavailable_order_paid": 0.99,
-            "late_delivery_seller": 0.97,
-            "late_delivery_logistics": 0.97,
-            "valid_split_payment": 0.95,
-            "unsupported_late_claim": 0.93,
+            "late_delivery_seller": 0.99,
+            "late_delivery_logistics": 0.99,
+            "valid_split_payment": 0.99,
+            "unsupported_late_claim": 0.99,
         }[primary_issue]
 
         if not order_seller["order_found"]:
