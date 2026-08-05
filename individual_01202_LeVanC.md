@@ -16,8 +16,8 @@
 
 | Module/deliverable | File/hàm phụ trách | Input nhận vào | Output bàn giao | Trạng thái |
 | ------------------ | ------------------ | -------------- | ----------------- | ------------------------------------- |
-| Delivery Agent | `delivery_agent.py` | `OrderSellerFindings` dict | `DeliveryFindings` dict | Hoàn thành |
-| Logistics Timing Analyser | `delivery_agent.py:DeliveryAgent` | Các mốc thời gian bàn giao và vận chuyển | Phân định lỗi trễ hạn thuộc về bên nào (Seller vs Logistics) | Hoàn thành |
+| Delivery Agent | `src/delivery_agent.py` | `OrderSellerFindings` dict | `DeliveryFindings` dict | Hoàn thành |
+| Logistics Timing Analyser | `src/delivery_agent.py:DeliveryAgent` | Các mốc thời gian bàn giao và vận chuyển | Phân định lỗi trễ hạn thuộc về bên nào (Seller vs Logistics) | Hoàn thành |
 
 ### Việc hỗ trợ ngoài phạm vi chính
 
@@ -29,8 +29,8 @@
 
 | Nhiệm vụ đã thực hiện | File/hàm/artifact liên quan | Kết quả bàn giao | Cách xác minh |
 | --------------------- | --------------------------- | ------------------------- | --------------- |
-| Khảo sát các mốc thời gian quan trọng | `delivery_agent.py` | Xác định rõ các mốc `shipping_limit_date`, `order_delivered_carrier_date`, `order_delivered_customer_date` và `order_estimated_delivery_date` | Đọc tài liệu dữ liệu Olist |
-| Xây dựng logic phân định trách nhiệm giao muộn | `delivery_agent.py:DeliveryAgent` | Trích xuất `DeliveryFindings` xác định rõ `is_late_delivery` và `responsible_party` | Chạy unit test kiểm tra schema |
+| Khảo sát các mốc thời gian quan trọng | `src/delivery_agent.py` | Xác định rõ các mốc `shipping_limit_date`, `order_delivered_carrier_date`, `order_delivered_customer_date` và `order_estimated_delivery_date` | Đọc tài liệu dữ liệu Olist |
+| Xây dựng logic phân định trách nhiệm giao muộn | `src/delivery_agent.py:DeliveryAgent` | Trích xuất `DeliveryFindings` xác định rõ `is_late_delivery` và `responsible_party` | Chạy unit test kiểm tra schema |
 
 Nêu một output cụ thể mà phần việc của bạn tạo ra hoặc giúp xác minh:
 Khi nhận vào findings có `order_delivered_customer_date` trễ hơn `order_estimated_delivery_date` (giao trễ cho khách hàng):
@@ -44,7 +44,7 @@ Khi nhận vào findings có `order_delivered_customer_date` trễ hơn `order_e
 So sánh chính xác các mốc thời gian vận chuyển để xác định xem đơn hàng có thực sự bị giao trễ hay không, và lỗi trễ hạn thuộc về ai (Người bán bàn giao trễ cho đơn vị vận chuyển hay đơn vị vận chuyển giao trễ cho khách hàng).
 
 ### Cách triển khai
-- Sử dụng hàm `parse_ts` từ `common.py` để chuyển đổi chuỗi ngày tháng thành các đối tượng `datetime` giúp việc so sánh lớn hơn/nhỏ hơn được chính xác.
+- Sử dụng hàm `parse_ts` từ `src/common.py` để chuyển đổi chuỗi ngày tháng thành các đối tượng `datetime` giúp việc so sánh lớn hơn/nhỏ hơn được chính xác.
 - Duyệt qua danh sách items của đơn hàng, đối chiếu mốc `shipping_limit_date` của từng sản phẩm với `order_delivered_carrier_date` chung của đơn hàng để xác định biến cờ hiệu `any_seller_late`.
 - Thiết lập logic rẽ nhánh để gán bên chịu trách nhiệm (`seller`, `logistics_provider` hoặc `None` nếu giao đúng hạn).
 
@@ -60,12 +60,12 @@ So sánh chính xác các mốc thời gian vận chuyển để xác định xe
 ### Cách xác minh
 
 ```bash
-python -c "from delivery_agent import DeliveryAgent; ag = DeliveryAgent(); print(ag.analyze({'order_id': '123', 'order_estimated_delivery_date': '2018-10-10 00:00:00', 'order_delivered_customer_date': '2018-10-12 00:00:00', 'order_delivered_carrier_date': '2018-10-09 00:00:00', 'items': [{'order_item_id': 1, 'seller_id': 'sel123', 'shipping_limit_date': '2018-10-08 00:00:00'}]}))"
+python -c "from src.delivery_agent import DeliveryAgent; ag = DeliveryAgent(); print(ag.analyze({'order_id': '123', 'order_estimated_delivery_date': '2018-10-10 00:00:00', 'order_delivered_customer_date': '2018-10-12 00:00:00', 'order_delivered_carrier_date': '2018-10-09 00:00:00', 'items': [{'order_item_id': 1, 'seller_id': 'sel123', 'shipping_limit_date': '2018-10-08 00:00:00'}]}))"
 ```
 
 - **Kết quả mong đợi:** Trả về dictionary cho thấy `is_late_delivery = True`, `any_seller_late = True`, và `responsible_party = 'seller'` (do carrier nhận hàng ngày 9 trễ hơn hạn shipping limit ngày 8).
 - **Kết quả thực tế:** Kết quả trả về đúng logic thiết lập, các mốc so khớp chính xác.
-- **Artifact/log:** `delivery_agent.py`
+- **Artifact/log:** `src/delivery_agent.py`
 
 ## 5. Một quyết định kỹ thuật quan trọng
 

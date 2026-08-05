@@ -5,7 +5,17 @@ representing different statuses (delivered, canceled, unavailable), and checks i
 outputs match the required data contracts in architecture.md.
 """
 
+from pathlib import Path
 import sys
+
+# Ensure both root and src/ are in the python path
+src_dir = Path(__file__).resolve().parent
+root_dir = src_dir.parent
+if str(root_dir) not in sys.path:
+    sys.path.insert(0, str(root_dir))
+if str(src_dir) not in sys.path:
+    sys.path.insert(0, str(src_dir))
+
 import pandas as pd
 from order_seller_agent import OrderSellerAgent
 from payment_agent import PaymentAgent, within_tolerance

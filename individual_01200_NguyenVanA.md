@@ -16,22 +16,22 @@
 
 | Module/deliverable | File/hàm phụ trách | Input nhận vào | Output bàn giao | Trạng thái |
 | ------------------ | ------------------ | -------------- | ----------------- | ------------------------------------- |
-| Order & Seller Agent | `order_seller_agent.py` | `claimed_order_id` (string) | `OrderSellerFindings` dict | Hoàn thành |
-| Data Query Engine | `order_seller_agent.py:OrderSellerQuery` | Thư mục dữ liệu chứa file CSV | Index tìm kiếm tối ưu hóa cho orders, items, sellers | Hoàn thành |
+| Order & Seller Agent | `src/order_seller_agent.py` | `claimed_order_id` (string) | `OrderSellerFindings` dict | Hoàn thành |
+| Data Query Engine | `src/order_seller_agent.py:OrderSellerQuery` | Thư mục dữ liệu chứa file CSV | Index tìm kiếm tối ưu hóa cho orders, items, sellers | Hoàn thành |
 
 ### Việc hỗ trợ ngoài phạm vi chính
 
 | Hoạt động | Thành viên/module được hỗ trợ | Kết quả |
 | ------------------------- | ----------------------------- | ----------------------- |
 | Hỗ trợ định nghĩa cấu trúc dữ liệu | Thành viên 4 (Delivery Agent) | Đồng bộ các trường thông tin thời gian bàn giao và hạn giao hàng của item |
-| Cung cấp hàm làm sạch dữ liệu | Nhóm phát triển | Hàm `clean` và `money` trong `common.py` dùng chung cho toàn bộ dự án |
+| Cung cấp hàm làm sạch dữ liệu | Nhóm phát triển | Hàm `clean` và `money` trong `src/common.py` dùng chung cho toàn bộ dự án |
 
 ## 3. Kết quả theo vai trò
 
 | Nhiệm vụ đã thực hiện | File/hàm/artifact liên quan | Kết quả bàn giao | Cách xác minh |
 | --------------------- | --------------------------- | ------------------------- | --------------- |
-| Khảo sát cấu trúc 9 file CSV của Olist | `order_seller_agent.py` | Xác định các khóa ngoại join giữa `orders`, `order_items`, `sellers` | Đọc cấu trúc header của CSV |
-| Xây dựng module trích xuất thông tin đơn hàng | `order_seller_agent.py:OrderSellerAgent` | `OrderSellerFindings` dict chứa đầy đủ metadata đơn hàng, danh sách item, tiền hàng, tiền ship, seller_ids | Chạy unit test kiểm tra schema |
+| Khảo sát cấu trúc 9 file CSV của Olist | `src/order_seller_agent.py` | Xác định các khóa ngoại join giữa `orders`, `order_items`, `sellers` | Đọc cấu trúc header của CSV |
+| Xây dựng module trích xuất thông tin đơn hàng | `src/order_seller_agent.py:OrderSellerAgent` | `OrderSellerFindings` dict chứa đầy đủ metadata đơn hàng, danh sách item, tiền hàng, tiền ship, seller_ids | Chạy unit test kiểm tra schema |
 
 Nêu một output cụ thể mà phần việc của bạn tạo ra hoặc giúp xác minh:
 Khi nhận vào `claimed_order_id = "e2a03ccf5ea816036608b2d8c3ab8e60"`, module trả về:
@@ -49,7 +49,7 @@ Trích xuất nhanh và chính xác thông tin đơn hàng và người bán t�
 ### Cách triển khai
 - Khởi tạo class `OrderSellerQuery` để load toàn bộ dữ liệu CSV vào bộ nhớ một lần duy nhất.
 - Tạo index `set_index("order_id")` trên bảng orders và gom nhóm `groupby("order_id")` trên bảng order_items nhằm tối ưu tốc độ tra cứu từ $O(N)$ xuống $O(1)$.
-- Sử dụng hàm helper `clean` trong `common.py` để chuyển các giá trị `NaN`/`NaT` của pandas thành `None` tiêu chuẩn của Python trước khi trả về.
+- Sử dụng hàm helper `clean` trong `src/common.py` để chuyển các giá trị `NaN`/`NaT` của pandas thành `None` tiêu chuẩn của Python trước khi trả về.
 
 ### Input, output và contract
 
@@ -64,12 +64,12 @@ Trích xuất nhanh và chính xác thông tin đơn hàng và người bán t�
 ### Cách xác minh
 
 ```bash
-python -c "from order_seller_agent import OrderSellerAgent; ag = OrderSellerAgent(); print(ag.analyze('e2a03ccf5ea816036608b2d8c3ab8e60'))"
+python -c "from src.order_seller_agent import OrderSellerAgent; ag = OrderSellerAgent(data_dir='data'); print(ag.analyze('e2a03ccf5ea816036608b2d8c3ab8e60'))"
 ```
 
 - **Kết quả mong đợi:** Trả về dictionary chứa thông tin chi tiết đơn hàng, mã seller, danh sách items và các mốc thời gian bàn giao.
 - **Kết quả thực tế:** Kết quả trả về dạng dictionary hợp lệ, các mốc thời gian khớp hoàn toàn với CSV, không bị lỗi dữ liệu `NaN`.
-- **Artifact/log:** `order_seller_agent.py`
+- **Artifact/log:** `src/order_seller_agent.py`
 
 ## 5. Một quyết định kỹ thuật quan trọng
 
