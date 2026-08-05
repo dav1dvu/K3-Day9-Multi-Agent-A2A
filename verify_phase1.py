@@ -1,6 +1,6 @@
 """Verification script for Phase 1.
 
-Instantiates OrderSellerAgent and DeliveryAgent, tests them with sample orders
+Instantiates OrderSellerAgent, PaymentAgent and DeliveryAgent, tests them with sample orders
 representing different statuses (delivered, canceled, unavailable), and checks if the
 outputs match the required data contracts in architecture.md.
 """
@@ -8,6 +8,7 @@ outputs match the required data contracts in architecture.md.
 import sys
 import pandas as pd
 from order_seller_agent import OrderSellerAgent
+from payment_agent import PaymentAgent, within_tolerance
 from delivery_agent import DeliveryAgent
 
 # Ensure UTF-8 printing on Windows
@@ -22,6 +23,7 @@ def main():
     print("\n[Step 1] Initializing agents...")
     try:
         order_seller = OrderSellerAgent(data_dir="data")
+        payment = PaymentAgent(data_dir="data")
         delivery = DeliveryAgent()
         print("Success: Agents initialized successfully.")
     except Exception as e:
@@ -72,6 +74,11 @@ def main():
         "order_delivered_carrier_date", "is_late_delivery", "seller_shipping_limits",
         "any_seller_late", "responsible_party"
     }
+
+    expected_payment_keys = {
+        "order_id", "payment_rows", "payment_total_brl", "payment_count",
+        "is_split_payment", "payment_matches_order", "tolerance_diff_brl"
+    }
     
     for status, oid in test_cases:
         print(f"\n--- Testing Order: {oid} ({status}) ---")
@@ -92,6 +99,22 @@ def main():
         print(f"  Item Total: {findings['item_total_brl']} BRL")
         print(f"  Freight Total: {findings['freight_total_brl']} BRL")
         print(f"  Seller IDs: {findings['seller_ids']}")
+
+        # Run Payment Agent
+        print("Running PaymentAgent...")
+        payment_findings = payment.analyze(
+            oid, findings["item_total_brl"], findings["freight_total_brl"]
+        )
+        missing_payment_keys = expected_payment_keys - set(payment_findings.keys())
+        if missing_payment_keys:
+            print(f"WARNING: Missing keys in PaymentFindings: {missing_payment_keys}")
+        else:
+            print("PaymentAgent findings contain all required keys.")
+
+        print(f"  Payment Count: {payment_findings['payment_count']}")
+        print(f"  Payment Total: {payment_findings['payment_total_brl']} BRL")
+        print(f"  Is Split Payment: {payment_findings['is_split_payment']}")
+        print(f"  Matches Order Total: {payment_findings['payment_matches_order']}")
         
         # Run Delivery Agent
         print("Running DeliveryAgent...")
@@ -107,6 +130,27 @@ def main():
         print(f"  Is Late Delivery: {deliv_findings['is_late_delivery']}")
         print(f"  Any Seller Late: {deliv_findings['any_seller_late']}")
         print(f"  Responsible Party: {deliv_findings['responsible_party']}")
+
+    # 4. Exercise the Phase 1 rules with an actual split-payment order.
+    print("\n[Step 4] Validating split-payment and tolerance rules...")
+    payment_counts = payment.query.payments.groupby("order_id").size()
+    split_order_id = payment_counts[payment_counts >= 2].index[0]
+    split_order = order_seller.analyze(split_order_id)
+    split_findings = payment.analyze(
+        split_order_id,
+        split_order["item_total_brl"],
+        split_order["freight_total_brl"],
+    )
+    assert split_findings["payment_count"] >= 2
+    assert split_findings["is_split_payment"] is True
+    assert split_findings["payment_matches_order"] is True
+    assert within_tolerance(100.10, 100.00) is True
+    assert within_tolerance(100.11, 100.00) is False
+    print(f"Split order: {split_order_id}")
+    print(f"  Payment Count: {split_findings['payment_count']}")
+    print(f"  Payment Total: {split_findings['payment_total_brl']} BRL")
+    print(f"  Difference: {split_findings['tolerance_diff_brl']} BRL")
+    print("Tolerance boundary checks: 0.10 accepted, 0.11 rejected.")
         
     print("\n=== PHASE 1 VERIFICATION COMPLETED ===")
 
