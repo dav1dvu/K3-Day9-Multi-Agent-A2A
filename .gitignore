@@ -8,6 +8,7 @@ __pycache__/
 htmlcov/
 submission.zip
 
+input
 CLAUDE.md
 AGENTS.md
 .claude

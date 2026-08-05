@@ -50,72 +50,72 @@ sau đó handoff bằng chứng cho Coordinator để tổng hợp kết luận 
 
 ### 3.1 Coordinator Agent
 
-| Thuộc tính              | Mô tả                                                                                     |
-| ----------------------- | ------------------------------------------------------------------------------------------ |
-| **Vai trò**             | Nhận case đầu vào, dispatch cho sub-agents theo thứ tự, thu thập kết quả, tổng hợp output |
-| **Input**               | File JSON từ `input/` (case_id, customer_request, claimed_order_id)                        |
-| **Output**              | `CaseContext` dict chứa toàn bộ findings → chuyển cho Verifier ghi file                   |
-| **Quyền kết luận cuối** | ✅ **Có** — agent duy nhất đưa ra `primary_issue`, `case_status`, `confidence`              |
-| **Quyền ghi output**    | ❌ Không — chuyển cho Verifier Agent ghi file                                               |
-| **LLM / Python**        | **LLM**: tổng hợp findings thành kết luận khi có mâu thuẫn hoặc cần suy luận. **Python**: orchestration, dispatch, collect |
+| Thuộc tính                      | Mô tả                                                                                                                                           |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Vai trò**                | Nhận case đầu vào, dispatch cho sub-agents theo thứ tự, thu thập kết quả, tổng hợp output                                              |
+| **Input**                   | File JSON từ`input/` (case_id, customer_request, claimed_order_id)                                                                             |
+| **Output**                  | `CaseContext` dict chứa toàn bộ findings → chuyển cho Verifier ghi file                                                                    |
+| **Quyền kết luận cuối** | ✅**Có** — agent duy nhất đưa ra `primary_issue`, `case_status`, `confidence`                                                    |
+| **Quyền ghi output**       | ❌ Không — chuyển cho Verifier Agent ghi file                                                                                                  |
+| **LLM / Python**            | **LLM**: tổng hợp findings thành kết luận khi có mâu thuẫn hoặc cần suy luận. **Python**: orchestration, dispatch, collect |
 
 ### 3.2 Order & Seller Agent
 
-| Thuộc tính              | Mô tả                                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------------------------ |
-| **Vai trò**             | Truy vấn thông tin đơn hàng, items, seller; xác định trạng thái order và mốc bàn giao của seller      |
-| **CSV truy cập**        | `olist_orders_dataset.csv`, `olist_order_items_dataset.csv`, `olist_sellers_dataset.csv`, `olist_products_dataset.csv` |
-| **Input**               | `claimed_order_id` từ Coordinator                                                                      |
-| **Output**              | `OrderSellerFindings` dict gồm: order_status, order_timestamps, item_list, seller_info, shipping_limit_dates, item_total, freight_total |
-| **Quyền kết luận cuối** | ❌ Không                                                                                                |
-| **Quyền ghi output**    | ❌ Không                                                                                                |
-| **LLM / Python**        | **Python 100%** — truy vấn CSV bằng pandas, join bảng, trích xuất dữ liệu có cấu trúc                |
+| Thuộc tính                      | Mô tả                                                                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Vai trò**                | Truy vấn thông tin đơn hàng, items, seller; xác định trạng thái order và mốc bàn giao của seller                             |
+| **CSV truy cập**           | `olist_orders_dataset.csv`, `olist_order_items_dataset.csv`, `olist_sellers_dataset.csv`, `olist_products_dataset.csv`             |
+| **Input**                   | `claimed_order_id` từ Coordinator                                                                                                       |
+| **Output**                  | `OrderSellerFindings` dict gồm: order_status, order_timestamps, item_list, seller_info, shipping_limit_dates, item_total, freight_total |
+| **Quyền kết luận cuối** | ❌ Không                                                                                                                                  |
+| **Quyền ghi output**       | ❌ Không                                                                                                                                  |
+| **LLM / Python**            | **Python 100%** — truy vấn CSV bằng pandas, join bảng, trích xuất dữ liệu có cấu trúc                                     |
 
 ### 3.3 Payment Agent
 
-| Thuộc tính              | Mô tả                                                                                     |
-| ----------------------- | ------------------------------------------------------------------------------------------ |
-| **Vai trò**             | Đối soát payment: tính tổng payment, so khớp với item + freight, phát hiện split payment   |
-| **CSV truy cập**        | `olist_order_payments_dataset.csv`                                                         |
-| **Input**               | `order_id` + `item_total` + `freight_total` từ Order & Seller Agent (qua Coordinator)      |
-| **Output**              | `PaymentFindings` dict gồm: payment_rows, payment_total, payment_count, payment_match (bool), tolerance_check |
-| **Quyền kết luận cuối** | ❌ Không                                                                                    |
-| **Quyền ghi output**    | ❌ Không                                                                                    |
-| **LLM / Python**        | **Python 100%** — tính toán số học, so sánh với tolerance 0.10 BRL, logic xác định         |
+| Thuộc tính                      | Mô tả                                                                                                          |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **Vai trò**                | Đối soát payment: tính tổng payment, so khớp với item + freight, phát hiện split payment                |
+| **CSV truy cập**           | `olist_order_payments_dataset.csv`                                                                             |
+| **Input**                   | `order_id` + `item_total` + `freight_total` từ Order & Seller Agent (qua Coordinator)                     |
+| **Output**                  | `PaymentFindings` dict gồm: payment_rows, payment_total, payment_count, payment_match (bool), tolerance_check |
+| **Quyền kết luận cuối** | ❌ Không                                                                                                        |
+| **Quyền ghi output**       | ❌ Không                                                                                                        |
+| **LLM / Python**            | **Python 100%** — tính toán số học, so sánh với tolerance 0.10 BRL, logic xác định               |
 
 ### 3.4 Delivery Agent
 
-| Thuộc tính              | Mô tả                                                                                                                     |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| **Vai trò**             | So sánh thời điểm giao thực tế với hạn giao ước tính; phân biệt trễ do seller hay do logistics                            |
-| **CSV truy cập**        | `olist_orders_dataset.csv`, `olist_order_items_dataset.csv`                                                                |
-| **Input**               | `order_id` + `shipping_limit_dates` từ Order & Seller Agent (qua Coordinator)                                              |
-| **Output**              | `DeliveryFindings` dict gồm: is_late (bool), delivered_date, estimated_date, carrier_date, seller_late (bool), responsible_party |
-| **Quyền kết luận cuối** | ❌ Không                                                                                                                    |
-| **Quyền ghi output**    | ❌ Không                                                                                                                    |
-| **LLM / Python**        | **Python 100%** — so sánh timestamp, logic xác định seller vs logistics                                                    |
+| Thuộc tính                      | Mô tả                                                                                                                             |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Vai trò**                | So sánh thời điểm giao thực tế với hạn giao ước tính; phân biệt trễ do seller hay do logistics                        |
+| **CSV truy cập**           | `olist_orders_dataset.csv`, `olist_order_items_dataset.csv`                                                                     |
+| **Input**                   | `order_id` + `shipping_limit_dates` từ Order & Seller Agent (qua Coordinator)                                                  |
+| **Output**                  | `DeliveryFindings` dict gồm: is_late (bool), delivered_date, estimated_date, carrier_date, seller_late (bool), responsible_party |
+| **Quyền kết luận cuối** | ❌ Không                                                                                                                           |
+| **Quyền ghi output**       | ❌ Không                                                                                                                           |
+| **LLM / Python**            | **Python 100%** — so sánh timestamp, logic xác định seller vs logistics                                                  |
 
 ### 3.5 Policy Agent
 
-| Thuộc tính              | Mô tả                                                                                                         |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------- |
-| **Vai trò**             | Áp dụng bảng quy tắc `EC_POLICY_V1` để xác định primary_issue, root_cause_code, responsible_party, refund và action |
-| **Input**               | Toàn bộ findings từ Order & Seller, Payment, Delivery Agents (qua Coordinator)                                 |
-| **Output**              | `PolicyDecision` dict gồm: primary_issue, root_cause_code, responsible_parties, recommended_refund_brl, resolution_actions, case_status |
-| **Quyền kết luận cuối** | ❌ Không — đề xuất decision, Coordinator xác nhận                                                               |
-| **Quyền ghi output**    | ❌ Không                                                                                                        |
-| **LLM / Python**        | **Python 100%** — bảng điều kiện if/elif xác định, không cần suy luận ngôn ngữ                                 |
+| Thuộc tính                      | Mô tả                                                                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Vai trò**                | Áp dụng bảng quy tắc`EC_POLICY_V1` để xác định primary_issue, root_cause_code, responsible_party, refund và action             |
+| **Input**                   | Toàn bộ findings từ Order & Seller, Payment, Delivery Agents (qua Coordinator)                                                          |
+| **Output**                  | `PolicyDecision` dict gồm: primary_issue, root_cause_code, responsible_parties, recommended_refund_brl, resolution_actions, case_status |
+| **Quyền kết luận cuối** | ❌ Không — đề xuất decision, Coordinator xác nhận                                                                                   |
+| **Quyền ghi output**       | ❌ Không                                                                                                                                  |
+| **LLM / Python**            | **Python 100%** — bảng điều kiện if/elif xác định, không cần suy luận ngôn ngữ                                          |
 
 ### 3.6 Verifier Agent
 
-| Thuộc tính              | Mô tả                                                                                                                       |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **Vai trò**             | Kiểm tra tính hợp lệ của output: schema validation, evidence ID format, số tiền consistency, giới hạn array; ghi file cuối |
-| **Input**               | `CaseContext` hoàn chỉnh từ Coordinator (đã có PolicyDecision)                                                               |
-| **Output**              | File JSON hợp lệ ghi vào `output/EC_XXX.json`                                                                               |
+| Thuộc tính                      | Mô tả                                                                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Vai trò**                | Kiểm tra tính hợp lệ của output: schema validation, evidence ID format, số tiền consistency, giới hạn array; ghi file cuối |
+| **Input**                   | `CaseContext` hoàn chỉnh từ Coordinator (đã có PolicyDecision)                                                               |
+| **Output**                  | File JSON hợp lệ ghi vào`output/EC_XXX.json`                                                                                    |
 | **Quyền kết luận cuối** | ❌ Không — chỉ validate, không thay đổi kết luận                                                                             |
-| **Quyền ghi output**    | ✅ **Có** — agent duy nhất được phép ghi file vào `output/`                                                                  |
-| **LLM / Python**        | **Python 100%** — schema check, format check, range check, file I/O                                                         |
+| **Quyền ghi output**       | ✅**Có** — agent duy nhất được phép ghi file vào `output/`                                                           |
+| **LLM / Python**            | **Python 100%** — schema check, format check, range check, file I/O                                                           |
 
 ---
 
@@ -170,27 +170,27 @@ Step 6  ┌──────────────▼────────
 
 ### Giải thích thứ tự
 
-| Step | Agent(s)              | Lý do thứ tự                                                       |
-| ---- | --------------------- | ------------------------------------------------------------------- |
-| 1    | Coordinator           | Parse input, khởi tạo context                                      |
-| 2    | Order & Seller        | Phải chạy trước vì Payment và Delivery cần item_total, freight_total, shipping_limit_dates |
-| 3    | Payment + Delivery    | Song song — độc lập nhau, cùng phụ thuộc output Step 2              |
-| 4    | Policy                | Cần ALL findings để áp dụng bảng quy tắc                           |
-| 5    | Coordinator           | Tổng hợp cuối, xác nhận hoặc override nếu mâu thuẫn                |
-| 6    | Verifier              | Cuối cùng — validate và ghi file                                    |
+| Step | Agent(s)           | Lý do thứ tự                                                                                   |
+| ---- | ------------------ | ------------------------------------------------------------------------------------------------- |
+| 1    | Coordinator        | Parse input, khởi tạo context                                                                   |
+| 2    | Order & Seller     | Phải chạy trước vì Payment và Delivery cần item_total, freight_total, shipping_limit_dates |
+| 3    | Payment + Delivery | Song song — độc lập nhau, cùng phụ thuộc output Step 2                                     |
+| 4    | Policy             | Cần ALL findings để áp dụng bảng quy tắc                                                   |
+| 5    | Coordinator        | Tổng hợp cuối, xác nhận hoặc override nếu mâu thuẫn                                      |
+| 6    | Verifier           | Cuối cùng — validate và ghi file                                                              |
 
 ---
 
 ## 5. Quyền hạn tóm tắt
 
-| Agent            | Đọc CSV | Đưa kết luận cuối | Ghi output file | Dùng LLM |
-| ---------------- | ------- | ------------------ | --------------- | -------- |
-| Coordinator      | ❌       | ✅                  | ❌               | ✅ (khi cần) |
-| Order & Seller   | ✅       | ❌                  | ❌               | ❌        |
-| Payment          | ✅       | ❌                  | ❌               | ❌        |
-| Delivery         | ✅       | ❌                  | ❌               | ❌        |
-| Policy           | ❌       | ❌                  | ❌               | ❌        |
-| Verifier         | ❌       | ❌                  | ✅               | ❌        |
+| Agent          | Đọc CSV | Đưa kết luận cuối | Ghi output file | Dùng LLM     |
+| -------------- | --------- | ---------------------- | --------------- | ------------- |
+| Coordinator    | ❌        | ✅                     | ❌              | ✅ (khi cần) |
+| Order & Seller | ✅        | ❌                     | ❌              | ❌            |
+| Payment        | ✅        | ❌                     | ❌              | ❌            |
+| Delivery       | ✅        | ❌                     | ❌              | ❌            |
+| Policy         | ❌        | ❌                     | ❌              | ❌            |
+| Verifier       | ❌        | ❌                     | ✅              | ❌            |
 
 ---
 
@@ -198,21 +198,21 @@ Step 6  ┌──────────────▼────────
 
 ### LLM tham gia (Qwen2.5-7B-Instruct)
 
-| Vị trí                        | Mục đích                                                             | Khi nào kích hoạt                             |
-| ----------------------------- | -------------------------------------------------------------------- | --------------------------------------------- |
+| Vị trí                       | Mục đích                                                                   | Khi nào kích hoạt                                    |
+| ------------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------- |
 | Coordinator — synthesize step | Tổng hợp findings từ nhiều agent, suy luận khi có mâu thuẫn dữ liệu | Khi logic xác định không đủ phân loại rõ ràng |
-| Coordinator — confidence      | Đánh giá mức độ tin cậy của kết luận                                 | Mọi case (gán confidence score)               |
+| Coordinator — confidence      | Đánh giá mức độ tin cậy của kết luận                                | Mọi case (gán confidence score)                       |
 
 ### Python xác định (không LLM)
 
-| Module                   | Xử lý                                                                  |
-| ------------------------ | ----------------------------------------------------------------------- |
-| Order & Seller Agent     | Pandas query, join CSV, trích xuất timestamps, tính item/freight totals |
-| Payment Agent            | Tổng payment, so sánh tolerance 0.10 BRL, đếm payment rows             |
-| Delivery Agent           | So sánh timestamps, phân loại seller_late vs carrier_late               |
-| Policy Agent             | Bảng if/elif rules theo EC_POLICY_V1                                    |
-| Verifier Agent           | JSON schema validation, evidence ID regex, giới hạn array, ghi file    |
-| Coordinator — parse/dispatch | Đọc JSON input, dispatch, collect findings                          |
+| Module                        | Xử lý                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| Order & Seller Agent          | Pandas query, join CSV, trích xuất timestamps, tính item/freight totals |
+| Payment Agent                 | Tổng payment, so sánh tolerance 0.10 BRL, đếm payment rows             |
+| Delivery Agent                | So sánh timestamps, phân loại seller_late vs carrier_late               |
+| Policy Agent                  | Bảng if/elif rules theo EC_POLICY_V1                                      |
+| Verifier Agent                | JSON schema validation, evidence ID regex, giới hạn array, ghi file      |
+| Coordinator — parse/dispatch | Đọc JSON input, dispatch, collect findings                               |
 
 ---
 
@@ -317,21 +317,16 @@ Step 6  ┌──────────────▼────────
 
 1. **Naming convention**: tên 5 sub-agents tuân theo gợi ý trong README section 7 —
    `Order & Seller Agent`, `Payment Agent`, `Delivery Agent`, `Policy Agent`, `Verifier Agent`.
-
 2. **Song song Step 3**: Payment Agent và Delivery Agent có thể chạy song song vì output
    của chúng không phụ thuộc lẫn nhau. Implementation có thể dùng `asyncio` hoặc
    `concurrent.futures`.
-
 3. **LLM usage tối thiểu**: do bài toán chủ yếu là logic xác định trên dữ liệu có cấu trúc,
    LLM chỉ được dùng ở Coordinator cho bước tổng hợp/confidence. Nếu pipeline xác định đủ
    tốt, LLM call có thể được bypass hoàn toàn cho performance.
-
 4. **Model ≤ 10B**: sử dụng `Qwen2.5-7B-Instruct` (7.62B params) chạy local qua Ollama
    hoặc qua API tương đương. Không sử dụng model lớn hơn.
-
 5. **Single-pass pipeline**: mỗi case chạy qua pipeline 1 lần, không có retry loop giữa
    các agent. Verifier chỉ validate, không gửi ngược lại Coordinator để sửa.
-
 6. **metadata.json**: đặt tại `logging/metadata.json` theo cấu trúc repo hiện tại.
    Bản sao cũng đặt tại root `metadata.json` nếu cần.
 
