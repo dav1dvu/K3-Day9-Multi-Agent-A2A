@@ -126,7 +126,7 @@ class PolicyAgent:
                 "actions": ["refund_freight"],
             }
 
-        if payment["payment_count"] >= 2 and payment["payment_matches_order"]:
+        if payment["valid_split_payment"]:
             return {
                 "primary_issue": "valid_split_payment",
                 "cause_codes": ["MULTIPLE_PAYMENTS_RECONCILED"],

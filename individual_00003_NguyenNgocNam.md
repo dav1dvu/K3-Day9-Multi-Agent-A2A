@@ -2,12 +2,12 @@
 
 ## 1. Thông tin cá nhân
 
-| Thông tin       | Nội dung |
-| --------------- | ------------ |
-| Họ và tên       | Nguyễn Ngọc Nam |
-| MSSV            | 00003 |
-| Khóa/Lớp        | K3 |
-| Vai trò chính   | Payment & Finance Agent Lead |
+| Thông tin | Nội dung |
+| --- | --- |
+| Họ và tên | Nguyễn Ngọc Nam |
+| MSSV | 01561 |
+| Khóa/Lớp | K3 |
+| Vai trò chính | Payment & Finance Agent Lead |
 | Ngày hoàn thành | 2026-08-05 |
 
 ## 2. Vai trò và phạm vi công việc
@@ -15,80 +15,95 @@
 ### Phần việc sở hữu
 
 | Module/deliverable | File/hàm phụ trách | Input nhận vào | Output bàn giao | Trạng thái |
-| ------------------ | ------------------ | -------------- | ----------------- | ------------------------------------- |
-| Payment Agent | `src/payment_agent.py` | `order_id`, `item_total`, `freight_total` từ Coordinator | Dữ liệu đối soát tài chính và so khớp thanh toán | Hoàn thành |
+| --- | --- | --- | --- | --- |
+| Payment Agent | `src/payment_agent.py` | `order_id`, `item_total_brl`, `freight_total_brl` từ Coordinator | `PaymentFindings` đã đối soát | Hoàn thành |
+| Kiểm thử Payment Phase 2 | `src/test_payment_agent.py` | Dữ liệu Olist và các trường hợp biên | Kết quả kiểm thử single/split/missing/tolerance | Hoàn thành |
+
+### Việc hỗ trợ ngoài phạm vi chính
+
+| Hoạt động | Thành viên/module được hỗ trợ | Kết quả |
+| --- | --- | --- |
+| Đồng bộ contract handoff | Coordinator và Policy Agent | Policy sử dụng trực tiếp cờ `valid_split_payment` do Payment Agent cung cấp |
 
 ## 3. Kết quả theo vai trò
 
 | Nhiệm vụ đã thực hiện | File/hàm/artifact liên quan | Kết quả bàn giao | Cách xác minh |
-| --------------------- | --------------------------- | ------------------------- | --------------- |
-| Khảo sát tệp dữ liệu thanh toán Olist | [src/payment_agent.py](file:///c:/CODE/AITHUCCHIEN/LABS/DAY09_2A202601199_VuNguyenQuocDat/src/payment_agent.py) | Module load nhanh dữ liệu thanh toán bằng pandas | Chạy `python src/verify_phase1.py` |
-| Tính toán so khớp tài chính & trích xuất split payment | [src/payment_agent.py](file:///c:/CODE/AITHUCCHIEN/LABS/DAY09_2A202601199_VuNguyenQuocDat/src/payment_agent.py) | Bảng tính tiền chính xác, cờ hiệu so khớp với sai số tối đa 0.10 BRL | Chạy `python src/verify_phase1.py` |
+| --- | --- | --- | --- |
+| Lập chỉ mục payment theo `order_id` | `src/payment_agent.py:PaymentQuery` | Truy xuất các dòng payment đã sắp xếp theo `payment_sequential` | `python src/verify_phase1.py` |
+| Đối soát tài chính | `src/payment_agent.py:PaymentAgent.analyze` | Tổng payment, số dòng, độ lệch và trạng thái khớp | `python -m unittest src.test_payment_agent -v` |
+| Phát hiện split payment hợp lệ | `src/payment_agent.py:PaymentAgent.analyze` | `valid_split_payment = is_split_payment and payment_matches_order` | `python -m unittest src.test_payment_agent -v` |
+| Xử lý ca không có payment | `src/payment_agent.py:PaymentAgent.analyze` | Không nhận nhầm trường hợp `0 = 0` là payment hợp lệ | `test_missing_payment_is_not_a_false_match` |
+
+Kết quả kiểm tra trên 50 case chính thức: 50 case có payment, 42 case đối soát khớp, 9 case là split payment và cả 9 case đều là split payment hợp lệ.
 
 ## 4. Giải thích phần kỹ thuật đã thực hiện
 
 ### Vấn đề cần giải quyết
-1. Đối khớp tổng số tiền khách hàng đã thanh toán thực tế (tổng hợp từ nhiều dòng thanh toán trong `olist_order_payments_dataset.csv`) với số tiền đơn hàng trên hệ thống (tổng giá trị hàng hóa `item_total` + tiền cước vận chuyển `freight_total`).
-2. Phát hiện và xử lý trường hợp thanh toán nhiều lần/nhiều phương thức (Split Payment).
-3. Đảm bảo tính toán chính xác tuyệt đối, tránh sai số do số thực dấu phẩy động (floating-point precision) gây ra khi tính tổng nhiều giao dịch.
+
+Payment Agent phải cộng toàn bộ `payment_value` của một đơn, kể cả khi khách thanh toán bằng nhiều dòng hoặc nhiều phương thức. Tổng này được so sánh với `item_total_brl + freight_total_brl`; độ lệch tối đa được chấp nhận là `0.10 BRL`.
 
 ### Cách triển khai
-- Đọc tệp dữ liệu thanh toán Olist, nhóm theo `order_id` và lưu trữ dưới dạng index truy vấn nhanh.
-- Trích xuất danh sách các dòng thanh toán `payment_rows` (sắp xếp tăng dần theo `payment_sequential`).
-- Áp dụng kiểm tra độ lệch tuyệt đối: `abs(payment_total - order_total) <= 0.10 BRL` để gán cờ `payment_matches_order`.
-- Làm tròn mọi giá trị tài chính về đúng 2 chữ số thập phân sử dụng helper `money`.
+
+- Đọc `olist_order_payments_dataset.csv` một lần bằng pandas và nhóm theo `order_id`.
+- Chuyển tiền sang `decimal.Decimal` từ chuỗi và làm tròn thương mại bằng `ROUND_HALF_UP` đến `0.01 BRL`.
+- Tính `payment_total_brl` từ các dòng payment đã sắp xếp.
+- Gán `has_payment` khi có ít nhất một dòng payment.
+- Gán `payment_matches_order` khi có payment và độ lệch không vượt quá `0.10 BRL`.
+- Gán `valid_split_payment` khi có từ hai dòng payment và tổng payment khớp tổng đơn.
 
 ### Input, output và contract
 
 | Thành phần | Mô tả |
-| ----------------------- | -------------------------------------- |
-| Input | `order_id` (string), `item_total_brl` (float), `freight_total_brl` (float) |
-| Output | Từ từ điển chứa: `payment_total_brl`, `payment_count`, `payment_rows`, `is_split_payment` (số lần thanh toán >= 2), `payment_matches_order`, `absolute_difference` |
+| --- | --- |
+| Input | `order_id: str`, `item_total_brl`, `freight_total_brl` |
+| Output | `payment_rows`, `payment_total_brl`, `payment_count`, `has_payment`, `is_split_payment`, `payment_matches_order`, `valid_split_payment`, `tolerance_diff_brl` |
+| Module phụ thuộc | `data/olist_order_payments_dataset.csv` |
+| Module sử dụng output | `CoordinatorAgent`, `PolicyAgent`, `VerifierAgent` |
+| Điều kiện lỗi cần xử lý | Thiếu file/cột dữ liệu, `order_id` rỗng, giá trị tiền không hợp lệ, đơn không có payment |
 
 ### Cách xác minh
+
 ```bash
+python -m unittest src.test_payment_agent -v
 python src/verify_phase1.py
 ```
-- **Kết quả mong đợi:** So khớp thành công tổng tiền cho các đơn hàng mẫu và phát hiện đúng các đơn hàng split payment, cờ so khớp trả về `True` nếu sai số nằm trong khoảng `[0.0, 0.10]` BRL.
-- **Kết quả thực tế:** Vượt qua toàn bộ các bước kiểm tra logic của script xác minh.
+
+- Kết quả mong đợi: single payment khớp nhưng không phải split; split payment khớp được gắn hợp lệ; độ lệch `0.10` được nhận và `0.11` bị từ chối; thiếu payment không được coi là khớp.
+- Kết quả thực tế: 4/4 kiểm thử Payment Agent đạt và kiểm thử hồi quy Phase 1 đạt.
+- Artifact/log: `src/test_payment_agent.py` và `logging/trace.jsonl`.
 
 ## 5. Một quyết định kỹ thuật quan trọng
 
-- **Bối cảnh:** Khi thực hiện phép so sánh trực tiếp tổng thanh toán với tổng đơn hàng, sai số dấu phẩy động của ngôn ngữ lập trình Python (ví dụ: `29.99 + 8.72 = 38.71000000000001` BRL) có thể khiến phép so sánh `==` trả về `False` dù về mặt toán học hai tổng bằng nhau.
-- **Các phương án đã cân nhắc:**
-  1. Sử dụng thư viện `decimal.Decimal` để tính toán tài chính (chính xác nhưng làm chậm tốc độ truy vấn pandas).
-  2. Sử dụng phép làm tròn `round(value, 2)` sau mỗi phép tính và so sánh bằng sai số sai lệch tối đa `0.10` BRL.
-- **Phương án đã chọn:** Phương án 2.
-- **Lý do:** Đảm bảo hiệu năng cao khi làm việc với lượng lớn dữ liệu bằng pandas, đồng thời đáp ứng hoàn hảo yêu cầu nghiệp vụ về khoảng sai số chấp nhận được (tolerance threshold) của đề bài.
+- **Bối cảnh:** Phép cộng `float` có thể sinh sai số nhị phân, không phù hợp để quyết định ngưỡng tiền `0.10 BRL`.
+- **Các phương án đã cân nhắc:** dùng `round(float, 2)` hoặc dùng `decimal.Decimal` với quy tắc làm tròn rõ ràng.
+- **Phương án đã chọn:** `Decimal` kết hợp `ROUND_HALF_UP`.
+- **Lý do:** kết quả tiền có thể tái lập, xử lý chính xác giá trị biên và không phụ thuộc biểu diễn nhị phân của `float`.
+- **Bằng chứng:** kiểm thử xác nhận độ lệch `0.10` trả về `True`, còn `0.11` trả về `False`.
 
 ## 6. Một lỗi hoặc blocker đã xử lý
 
-- **Triệu chứng:** Trong một số đơn hàng bị hủy hoặc không có dòng thanh toán nào trong CSV, hàm tính tổng tiền trả về giá trị `NaN` hoặc lỗi `Empty Dataframe` khi tính toán tổng thanh toán.
-- **Cách xử lý:** Bổ sung kiểm tra sự tồn tại của dữ liệu trước khi tính toán. Nếu không tìm thấy thông tin thanh toán, trả về mặc định `payment_total_brl = 0.0` và `payment_count = 0` một cách an toàn.
-- **Cách xác minh sau khi sửa:** Chạy kiểm thử chéo và xác nhận hệ thống không bị lỗi khi đối mặt với đơn hàng bị hủy mà chưa thanh toán.
+- **Triệu chứng:** đơn không có payment và tổng item/freight bằng `0.0` có thể bị nhận nhầm là đã đối soát thành công vì `0.0 == 0.0`.
+- **Nguyên nhân gốc:** điều kiện cũ chỉ kiểm tra độ lệch mà không kiểm tra sự tồn tại của payment.
+- **Cách xử lý:** bổ sung `has_payment`; `payment_matches_order` chỉ đúng khi `has_payment` đúng và độ lệch không quá `0.10`.
+- **Cách xác minh:** `test_missing_payment_is_not_a_false_match` kiểm tra payment rỗng trả về `payment_matches_order = False` và `valid_split_payment = False`.
+- **Điều học được:** cần phân biệt giá trị tổng bằng không với việc thực sự có bản ghi giao dịch.
 
 ## 7. Hiểu biết về luồng end-to-end
 
-1. **Dữ liệu đi từ Crossref đến vector index như thế nào?**
-   Dữ liệu thô từ Crossref API được tải về dưới dạng JSON, tiến hành làm sạch metadata, trích xuất nội dung văn bản. Văn bản được chia thành các đoạn nhỏ (chunking), sau đó đi qua mô hình nhúng (Embedding Model) để chuyển đổi thành vector đại diện và được lưu trữ vào cơ sở dữ liệu vector (Vector Database index) kèm metadata.
-2. **Evaluation set và ground-truth document IDs dùng để đo retrieval/answer quality ra sao?**
-   Tập evaluation set chứa các câu hỏi kiểm thử. Ground-truth document IDs là danh sách các tài liệu thực sự chứa câu trả lời chuẩn xác. Chất lượng retrieval được đo bằng việc so khớp các tài liệu được retrieve với ground-truth (qua Recall@K, Precision@K, MAP). Chất lượng câu trả lời (answer quality) được đánh giá bằng độ trùng khớp thông tin hoặc dùng LLM-as-a-judge để chấm điểm.
-3. **Quality checks khác freshness monitoring ở điểm nào trong bài lab?**
-   Quality checks kiểm tra tính đúng đắn, toàn vẹn và sạch sẽ của dữ liệu (schema, định dạng, logic nghiệp vụ). Freshness monitoring kiểm tra mức độ cập nhật của dữ liệu, tần suất cập nhật dữ liệu mới từ nguồn vào hệ thống index.
-4. **Vì sao phải dùng cùng test set cho baseline, corrupted và repaired?**
-   Để đảm bảo tính nhất quán và tính khoa học của thực nghiệm (A/B testing). Khi giữ nguyên tập test set, mọi sự thay đổi của metric đo lường chất lượng hoàn toàn là do thay đổi cấu hình hệ thống (corrupted hoặc repaired) chứ không bị ảnh hưởng bởi sự khác biệt của câu hỏi đầu vào.
-5. **Repair được xem là thành công dựa trên artifact và metric nào?**
-   Repair thành công khi các metric đánh giá chất lượng (Recall, Accuracy, F1) phục hồi về mức tương đương hoặc vượt trội so với baseline, đồng thời các file output/artifact sinh ra đạt chuẩn schema cấu trúc và không còn chứa dữ liệu lỗi logic.
+1. Coordinator đọc input, xác thực schema và lấy `claimed_order_id`.
+2. Order & Seller Agent truy xuất đơn, item, seller, đồng thời tính tổng giá sản phẩm và phí vận chuyển.
+3. Payment Agent nhận các tổng này để đối soát với dữ liệu thanh toán; Delivery Agent phân tích các mốc vận chuyển.
+4. Policy Agent kết hợp findings theo thứ tự ưu tiên `EC_POLICY_V1`, xác định vấn đề, trách nhiệm, tiền hoàn và hành động.
+5. Verifier Agent kiểm tra schema, entity, evidence và giới hạn trước khi ghi JSON vào `output/`.
+6. Trace ghi lại các lần gọi agent và handoff để kiểm toán luồng multi-agent.
 
 ## 8. Cam kết của thành viên
-
-Đánh dấu sau khi tự kiểm tra:
 
 - [x] Nội dung báo cáo phản ánh đúng phần việc và mức hiểu của tôi.
 - [x] Tôi có thể giải thích luồng end-to-end, không chỉ module mình phụ trách.
 - [x] Tôi không ghi “đã chạy thành công” cho phần chưa được kiểm chứng.
 - [x] Báo cáo không chứa `.env`, API key, token hoặc secret.
-- [x] Báo cáo này không phải bản sao nguyên văn của báo cáo nhóm hoặc báo cáo thành viên khác.
+- [x] Báo cáo này không phải bản sao nguyên văn của báo cáo nhóm hoặc thành viên khác.
 
 **Họ và tên:** Nguyễn Ngọc Nam
 **Ngày xác nhận:** 2026-08-05

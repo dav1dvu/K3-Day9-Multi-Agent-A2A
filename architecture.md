@@ -266,8 +266,10 @@ Step 6  ┌──────────────▼────────
     ],
     "payment_total_brl": float,                   # sum(payment_value)
     "payment_count": int,
+    "has_payment": bool,                         # payment_count > 0
     "is_split_payment": bool,                     # count >= 2
-    "payment_matches_order": bool,                # |payment_total - (item_total + freight_total)| <= 0.10
+    "payment_matches_order": bool,                # has_payment and difference <= 0.10
+    "valid_split_payment": bool,                  # is_split_payment and payment_matches_order
     "tolerance_diff_brl": float
 }
 ```
