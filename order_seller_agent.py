@@ -10,7 +10,7 @@ from typing import Dict, List, Optional
 
 import pandas as pd
 
-from common import clean, money
+from common import clean, money, parse_ts
 
 
 class OrderSellerQuery:
@@ -78,23 +78,39 @@ class OrderSellerAgent:
         found = order is not None
 
         items_df = self.query.get_order_items(claimed_order_id) if found else pd.DataFrame()
-        items: List[Dict] = [
-            {
-                "order_item_id": int(row["order_item_id"]),
-                "product_id": clean(row["product_id"]),
-                "seller_id": clean(row["seller_id"]),
-                "shipping_limit_date": clean(row["shipping_limit_date"]),
-                "price": money(row["price"]),
-                "freight_value": money(row["freight_value"]),
-            }
-            for _, row in items_df.iterrows()
-        ]
+        order_status = clean(order["order_status"]) if found else None
+        carrier_date = clean(order["order_delivered_carrier_date"]) if found else None
+        carrier_ts = parse_ts(carrier_date)
+
+        items: List[Dict] = []
+        for _, row in items_df.iterrows():
+            shipping_limit_date = clean(row["shipping_limit_date"])
+            limit_ts = parse_ts(shipping_limit_date)
+            carrier_after_limit = bool(carrier_ts and limit_ts and carrier_ts > limit_ts)
+            items.append(
+                {
+                    "order_item_id": int(row["order_item_id"]),
+                    "product_id": clean(row["product_id"]),
+                    "seller_id": clean(row["seller_id"]),
+                    "shipping_limit_date": shipping_limit_date,
+                    "price": money(row["price"]),
+                    "freight_value": money(row["freight_value"]),
+                    "carrier_after_limit": carrier_after_limit,
+                }
+            )
 
         item_total = money(sum(i["price"] for i in items))
         freight_total = money(sum(i["freight_value"] for i in items))
         seller_ids = sorted({i["seller_id"] for i in items if i["seller_id"]})
 
-        order_status = clean(order["order_status"]) if found else None
+        is_canceled = order_status == "canceled"
+        is_unavailable = order_status == "unavailable"
+        status_tags: List[str] = []
+        if is_canceled:
+            status_tags.append("canceled")
+        if is_unavailable:
+            status_tags.append("unavailable")
+        any_carrier_after_limit = any(i["carrier_after_limit"] for i in items)
 
         return {
             "order_id": order_id,
@@ -102,7 +118,7 @@ class OrderSellerAgent:
             "order_status": order_status,
             "order_purchase_timestamp": clean(order["order_purchase_timestamp"]) if found else None,
             "order_approved_at": clean(order["order_approved_at"]) if found else None,
-            "order_delivered_carrier_date": clean(order["order_delivered_carrier_date"]) if found else None,
+            "order_delivered_carrier_date": carrier_date,
             "order_delivered_customer_date": clean(order["order_delivered_customer_date"]) if found else None,
             "order_estimated_delivery_date": clean(order["order_estimated_delivery_date"]) if found else None,
             "customer_id": clean(order["customer_id"]) if found else None,
@@ -110,8 +126,10 @@ class OrderSellerAgent:
             "item_total_brl": item_total,
             "freight_total_brl": freight_total,
             "seller_ids": seller_ids,
-            "is_canceled": order_status == "canceled",
-            "is_unavailable": order_status == "unavailable",
+            "is_canceled": is_canceled,
+            "is_unavailable": is_unavailable,
+            "status_tags": status_tags,
+            "any_carrier_after_limit": any_carrier_after_limit,
         }
 
 
